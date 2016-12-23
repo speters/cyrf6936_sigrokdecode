@@ -34,25 +34,22 @@ class Decoder(srd.Decoder):
     inputs = ['spi']
     outputs = ['cyrf6936']
     annotations = (
-        # Sent from the host to the chip.
-        ('cmd', 'Commands sent to the device'),
+        ('write', 'Write'),
+        ('read', 'Read'),
         ('tx-data', 'Payload sent to the device'),
-
-        # Returned by the chip.
-        ('register', 'Registers read from the device'),
         ('rx-data', 'Payload read from the device'),
-
+        ('state', 'State change'),
         ('warning', 'Warnings'),
     )
-    ann_cmd = 0
-    ann_tx = 1
-    ann_reg = 2
+    ann_write = 0
+    ann_read = 1
+    ann_tx = 2
     ann_rx = 3
-    ann_warn = 4
+    ann_state = 4
+    ann_warn = 5
     annotation_rows = (
-        ('writes', 'Writes', (ann_cmd, ann_tx)),
-        ('reads', 'Reads', (ann_reg, ann_rx)),
-        ('warnings', 'Warnings', (ann_warn,)),
+        ('cmd', 'Commands', (ann_write, ann_read, ann_tx, ann_rx)),
+        ('warnings', 'Warnings', (ann_warn, ann_state)),
     )
 
     def __init__(self):
@@ -78,8 +75,8 @@ class Decoder(srd.Decoder):
 
         # The current command, and the minimum and maximum number
         # of data bytes to follow.
-        self.cmd = None
-        self.dir = 1 # Command direction: 1 = write, 0 = read
+        self.addr = None
+        self.dir_wr = 1 # Command direction: 1 = write, 0 = read
         self.inc = 0 # Command increment: 1 = auto address increment, 0 = same address
         self.min = 0
         self.max = 0
@@ -103,34 +100,32 @@ class Decoder(srd.Decoder):
         the decoding of the following data bytes.'''
         c = self.parse_command(b)
         if c is None:
-            self.warn(pos, 'unknown command')
+            self.warn(pos, 'unknown address/register')
             return
 
-        self.cmd, self.dat, self.min, self.max = c
+        self.addr, self.dir_wr, self.inc = c
+        self.min = 1
+        self.max = regs[self.addr][1]
 
-        if self.cmd in ('W_REGISTER'):
-            # Don't output anything now, the command is merged with
-            # the data bytes following it.
-            self.mb_s = pos[0]
-        else:
-            self.putp(pos, self.ann_cmd, self.format_command())
+        self.putp(pos, self.ann_write if (self.dir_wr == 1) else self.ann_read, self.format_command())
 
     def format_command(self):
         '''Returns the label for the current command.'''
-        if self.cmd == 'R_REGISTER':
-            reg = regs[self.dat][0] if self.dat in regs else 'unknown register'
-            return 'R_REGISTER "{}"'.format(reg)
+        reg = regs[self.addr][0] if self.addr in regs else self.convert_mb_data(reg, True)
+        multi = '_inc' if self.inc == 1 else ''
+
+        if self.dir_wr == 1:
+            return 'write{}({})'.format(multi, reg)
         else:
-            return 'Cmd {}'.format(self.cmd)
+            return 'read{}({})'.format(multi, reg)
 
     def parse_command(self, b):
         '''Parses the command byte.
 
         Returns a tuple consisting of:
         - the name of the command / register
-        - additional data needed to dissect the following bytes
-        - minimum number of following bytes
-        - maximum number of following bytes
+        - direction of transaction (read/write)
+        - single address or incremental address
         '''
 
         cmd_addr = (b & 0b111111)
@@ -138,51 +133,18 @@ class Decoder(srd.Decoder):
         cmd_inc = (b & (1<<6))>>6  # 1 = auto address increment, 0 = keep address
 
         if cmd_addr in regs:
-            c = 'R_REGISTER' if (cmd_dir == 0) else 'W_REGISTER'
-            m = regs[cmd_addr][1]
-            return (c, cmd_addr, 1, m)
+            return (cmd_addr, cmd_dir, cmd_inc)
         else:
             return None # addr unknown
 
-
-    def decode_register(self, pos, ann, regid, data):
-        '''Decodes a register.
-
-        pos   -- start and end sample numbers of the register
-        ann   -- is the annotation number that is used to output the register.
-        regid -- may be either an integer used as a key for the 'regs'
-                 dictionary, or a string directly containing a register name.'
-        data  -- is the register content.
-        '''
-
-        if type(regid) == int:
-            # Get the name of the register.
-            if regid not in regs:
-                self.warn(pos, 'unknown register')
-                return
-            name = regs[regid][0]
-        else:
-            name = regid
-
-        # Multi byte register come LSByte first.
-        # data = reversed(data)
-
-        textdata = self.convert_mb_data(data, True)
-
-        if self.cmd == 'W_REGISTER' and ann == self.ann_cmd:
-            # The 'W_REGISTER' command is merged with the following byte(s).
-            text = 'wr({}, "{}")'.format(name, textdata)
-        else:
-            text = 'rd({}) == "{}"'.format(name, textdata)
-
-        self.putp(pos, ann, text)
-
-    def convert_mb_data(self, data, always_hex):
+    def convert_mb_data(self, data, always_hex = True):
         '''Converts the data bytes 'data' of a multibyte command to text.
         If 'always_hex' is True, all bytes are decoded as hex codes, otherwise only non
         printable characters are escaped.'''
 
+        prefix = ''
         if always_hex:
+            prefix = '0x'
             def escape(b):
                 return '{:02X}'.format(b)
         else:
@@ -192,17 +154,21 @@ class Decoder(srd.Decoder):
                     return '\\x{:02X}'.format(b)
                 return c
 
-        return ''.join([escape(b) for b in data])
+        return '%s%s' % (prefix, ''.join([escape(b) for b in data]))
 
     def finish_command(self, pos):
         '''Decodes the remaining data bytes at position 'pos'.'''
 
-        if self.cmd == 'R_REGISTER':
-            self.decode_register(pos, self.ann_reg,
-                                 self.dat, self.miso_bytes())
-        elif self.cmd == 'W_REGISTER':
-            self.decode_register(pos, self.ann_cmd,
-                                 self.dat, self.mosi_bytes())
+        if self.dir_wr == 1:
+            data = self.mosi_bytes()
+            ann = self.ann_tx
+        else:
+            data = self.miso_bytes()
+            ann = self.ann_rx
+
+        textdata = self.convert_mb_data(data, True)
+        self.putp(pos, ann, textdata)
+
 
     def decode(self, ss, es, data):
         if not self.requirements_met:
@@ -221,7 +187,7 @@ class Decoder(srd.Decoder):
             if data1 == 0 and data2 == 1:
                 # Rising edge, the complete command is transmitted, process
                 # the bytes that were send after the command byte.
-                if self.cmd:
+                if self.addr:
                     # Check if we got the minimum number of data bytes
                     # after the command byte.
                     if len(self.mb) < self.min:
@@ -247,11 +213,13 @@ class Decoder(srd.Decoder):
                 if (miso != 0xff):
                     self.warn((ss, ss), 'unrequested data')
             else:
-                if not self.cmd or len(self.mb) >= self.max:
-                    self.warn(pos, 'excess byte')
+                if (self.addr == None) or (len(self.mb) >= self.max):
+                        self.warn(pos, 'excess byte')
                 else:
                     # Collect the bytes after the command byte.
                     if self.mb_s == -1:
                         self.mb_s = ss
                     self.mb_e = es
                     self.mb.append((mosi, miso))
+                    if self.inc:
+                        self.addr += 1
