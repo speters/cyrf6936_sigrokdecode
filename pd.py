@@ -39,6 +39,7 @@ class Decoder(srd.Decoder):
         ('rx-data', 'Payload read from the device'),
         ('state', 'State change'),
         ('warning', 'Warnings'),
+        ('wait', 'Wait'),
     )
     ann_write = 0
     ann_read = 1
@@ -46,15 +47,18 @@ class Decoder(srd.Decoder):
     ann_rx = 3
     ann_state = 4
     ann_warn = 5
+    ann_wait = 6
     annotation_rows = (
         ('cmd', 'Commands', (ann_write, ann_read, ann_tx, ann_rx)),
         ('warnings', 'Warnings', (ann_warn, ann_state)),
+        ('delays', 'Delays', (ann_wait,)),
     )
     options = (
             {'id': 'spi3pin', 'desc': 'SPI 3-Pin mode with MOSI/MISO combined as SDAT on the MOSI pin',
                 'default': 'no', 'values': ('no', 'yes')},
             {'id': 'annsplit', 'desc': 'split cmd annotation in command, payload',
                 'default': 'no', 'values': ('no', 'yes')},
+            {'id': 'delaysplit', 'desc': 'annotate delays (in us) larger than... (0 = off)', 'default': 0},
     )
 
     def __init__(self):
@@ -63,6 +67,10 @@ class Decoder(srd.Decoder):
         self.requirements_met = True
         self.cs_was_released = False
         self.annsplit = False
+        self.samplerate = None
+        self.delaysplit = 0
+        self.wait_s = 0
+        self.wait_e = 0
 
     def start(self):
         self.out_ann = self.register(srd.OUTPUT_ANN)
@@ -70,6 +78,14 @@ class Decoder(srd.Decoder):
             self.spi3pin = 1
         if self.options['annsplit'] == 'yes':
             self.annsplit = True
+        try:
+            self.delaysplit = float(self.options['delaysplit'])
+        except ValueError:
+            self.delaysplit = 0
+
+    def metadata(self, key, value):
+        if key == srd.SRD_CONF_SAMPLERATE:
+            self.samplerate = value
 
     def warn(self, pos, msg):
         '''Put a warning message 'msg' at 'pos'.'''
@@ -217,8 +233,19 @@ class Decoder(srd.Decoder):
                     elif self.mb:
                         self.finish_command((self.mb_s, self.mb_e))
 
+                self.wait_s = es
+
                 self.next()
                 self.cs_was_released = True
+
+            if data1 == 1 and data2 == 0:
+                # Falling edge of CS# / start of pause
+                self.wait_e = ss
+                if (self.delaysplit > 0) and (self.wait_e > self.wait_s):
+                    dt = ((self.wait_e - self.wait_s) *1000000)/ self.samplerate
+                    if (dt >= self.delaysplit):
+                        self.putp((self.wait_s, self.wait_e), self.ann_wait, "delay_us({})".format(dt))
+
         elif ptype == 'DATA' and self.cs_was_released:
             mosi, miso = data1, data2
             pos = (ss, es)
