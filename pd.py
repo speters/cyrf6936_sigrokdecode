@@ -51,19 +51,25 @@ class Decoder(srd.Decoder):
         ('cmd', 'Commands', (ann_write, ann_read, ann_tx, ann_rx)),
         ('warnings', 'Warnings', (ann_warn, ann_state)),
     )
+    options = (
+            {'id': 'spi3pin', 'desc': 'SPI 3-Pin mode with MOSI/MISO combined as SDAT on the MOSI pin',
+                'default': 'no', 'values': ('no', 'yes')},
+    )
 
     def __init__(self):
         self.next()
+        self.spi3pin = 0 # 0 = 4-pin SPI with CLK, CSn, MOSI, MISO; 1 = 3-pin SPI with CLK, CSn, SDAT
         self.requirements_met = True
         self.cs_was_released = False
 
     def start(self):
         self.out_ann = self.register(srd.OUTPUT_ANN)
+        if self.options['spi3pin'] == 'yes':
+            self.spi3pin = 1
 
     def warn(self, pos, msg):
         '''Put a warning message 'msg' at 'pos'.'''
         self.put(pos[0], pos[1], self.out_ann, [self.ann_warn, [msg]])
-
     def putp(self, pos, ann, msg):
         '''Put an annotation message 'msg' at 'pos'.'''
         self.put(pos[0], pos[1], self.out_ann, [ann, [msg]])
@@ -163,7 +169,7 @@ class Decoder(srd.Decoder):
             data = self.mosi_bytes()
             ann = self.ann_tx
         else:
-            data = self.miso_bytes()
+            data = self.miso_bytes() if (self.spi3pin == 0) else self.mosi_bytes()
             ann = self.ann_rx
 
         textdata = self.convert_mb_data(data, True)
@@ -201,25 +207,44 @@ class Decoder(srd.Decoder):
             mosi, miso = data1, data2
             pos = (ss, es)
 
-            if miso is None or mosi is None:
+            if mosi is None:
                 self.requirements_met = False
-                raise ChannelError('Both MISO and MOSI pins required.')
+                raise ChannelError('A MOSI/SDAT pin is required.')
 
             if self.first:
                 self.first = False
                 # First MOSI byte is always the command.
                 self.decode_command(pos, mosi)
                 # First MISO byte is discarded
-                if (miso != 0xff):
+                if ((miso is not None) and (miso != 0xff)):
                     self.warn((ss, ss), 'unrequested data')
             else:
-                if (self.addr == None) or (len(self.mb) >= self.max):
+                if (self.addr is None) or (len(self.mb) >= self.max):
                         self.warn(pos, 'excess byte')
+                elif ((miso is None) and (self.spi3pin == 0)):
+                    self.requirements_met = False
+                    raise ChannelError('A MISO pin is required in 4-pin SPI mode.')
                 else:
                     # Collect the bytes after the command byte.
                     if self.mb_s == -1:
                         self.mb_s = ss
                     self.mb_e = es
                     self.mb.append((mosi, miso))
+
+                    if self.addr == 0x0d: # IO_CFG_ADDR
+                        old_spi3pin = self.spi3pin
+                        if (self.dir_wr == 0) and (self.spi3pin == 0):
+                            b = miso
+                        else:
+                            b = mosi
+                        if ((b & 0x02) == 0x02):
+                            self.spi3pin = 1
+                            msg = "3-pin SPI mode (SDAT)"
+                        else:
+                            self.spi3pin = 0
+                            msg = "4-pin SPI mode (MOSI/MISO)"
+                        if self.spi3pin != old_spi3pin:
+                            self.put(ss, es, self.out_ann, [self.ann_status, [msg]])
+
                     if self.inc:
                         self.addr += 1
