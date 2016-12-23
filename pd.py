@@ -54,6 +54,8 @@ class Decoder(srd.Decoder):
     options = (
             {'id': 'spi3pin', 'desc': 'SPI 3-Pin mode with MOSI/MISO combined as SDAT on the MOSI pin',
                 'default': 'no', 'values': ('no', 'yes')},
+            {'id': 'annsplit', 'desc': 'split cmd annotation in command, payload',
+                'default': 'no', 'values': ('no', 'yes')},
     )
 
     def __init__(self):
@@ -61,11 +63,14 @@ class Decoder(srd.Decoder):
         self.spi3pin = 0 # 0 = 4-pin SPI with CLK, CSn, MOSI, MISO; 1 = 3-pin SPI with CLK, CSn, SDAT
         self.requirements_met = True
         self.cs_was_released = False
+        self.annsplit = False
 
     def start(self):
         self.out_ann = self.register(srd.OUTPUT_ANN)
         if self.options['spi3pin'] == 'yes':
             self.spi3pin = 1
+        if self.options['annsplit'] == 'yes':
+            self.annsplit = True
 
     def warn(self, pos, msg):
         '''Put a warning message 'msg' at 'pos'.'''
@@ -113,17 +118,26 @@ class Decoder(srd.Decoder):
         self.min = 1
         self.max = regs[self.addr][1]
 
-        self.putp(pos, self.ann_write if (self.dir_wr == 1) else self.ann_read, self.format_command())
+        if self.annsplit:
+            self.putp(pos, self.ann_write if (self.dir_wr == 1) else self.ann_read, self.format_command())
+        else:
+            self.mb_s = pos[0]
 
-    def format_command(self):
+    def format_command(self, textdata = None):
         '''Returns the label for the current command.'''
         reg = regs[self.addr][0] if self.addr in regs else self.convert_mb_data(reg, True)
         multi = '_inc' if self.inc == 1 else ''
 
         if self.dir_wr == 1:
-            return 'write{}({})'.format(multi, reg)
+            if textdata is None:
+                return 'write{}({})'.format(multi, reg)
+            else:
+                return 'write{}({}, "{}")'.format(multi, reg, textdata)
         else:
-            return 'read{}({})'.format(multi, reg)
+            if textdata is None:
+                return 'read{}({})'.format(multi, reg)
+            else:
+                return 'read{}({}) == "{}"'.format(multi, reg, textdata)
 
     def parse_command(self, b):
         '''Parses the command byte.
@@ -173,7 +187,10 @@ class Decoder(srd.Decoder):
             ann = self.ann_rx
 
         textdata = self.convert_mb_data(data, True)
-        self.putp(pos, ann, textdata)
+        if self.annsplit == True:
+            self.putp(pos, ann, textdata)
+        else:
+            self.putp(pos, self.ann_write if (self.dir_wr == 1) else self.ann_read, self.format_command(textdata))
 
 
     def decode(self, ss, es, data):
