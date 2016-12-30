@@ -64,3 +64,85 @@ regs = {
     0x24: ('PREAMBLE_ADR',          3, 'BBB', 0x333302),
     0x25: ('MFG_ID_ADR',            6, 'RRRRRR', '------')
 }
+
+
+class RegDecode():
+    regs = {}
+    regnames = {}
+    decoderfuncs = {}
+
+    def __init__(self, regs = {}):
+        RegDecode.defs(regs)
+
+    def defs(regs):
+        RegDecode.regs = regs
+        regnames = {}
+        for reg, name in RegDecode.regs.items():
+            regnames[name] = reg
+        RegDecode.regnames = regnames
+
+    def name(r):
+        if r in RegDecode.regs:
+            return RegDecode.regs[r][0]
+        elif r in RegDecode.regnames:
+            return r
+        else:
+            raise AttributeError('No such register "{}"'.format(r))
+
+    def addr(r):
+        try:
+            r = int(r, 0)
+        except TypeError:
+            pass
+        if r in RegDecode.regs:
+            return r
+        elif r in RegDecode.regnames:
+            return RegDecode.regnames[r]
+        else:
+            raise AttributeError('No such register "{}"'.format(r))
+
+    def add_decoderfunc(r, f):
+        r = RegDecode.addr(r)
+        if r is not None:
+            RegDecode.decoderfuncs[r] = f
+
+    def decode(r, val):
+        try:
+            val = int(val, 0)
+        except TypeError:
+            pass
+        r = RegDecode.addr(r)
+        if (r is not None):
+            if (r in RegDecode.decoderfuncs):
+                return RegDecode.decoderfuncs[r](val)
+            else:
+                return val
+        else:
+            return val
+
+RegDecode(regs)
+
+class RDecode(RegDecode):
+    def __init__(self, f):
+        regname = f.__name__.replace('reg_', '')
+        self.f = f
+        RegDecode.add_decoderfunc(regname, f)
+
+    def __call__(self, *args, **kwargs):
+        return self.f(*args, **kwargs)
+
+@RDecode
+def reg_0x00(v = 0x48):
+    CHANNEL_MSK = 0x7F
+    CHANNEL_MAX = 0x62
+    CHANNEL_MIN = 0x00
+    v = v & CHANNEL_MSK
+    if (v >= CHANNEL_MIN) and (v <= CHANNEL_MAX):
+        return "CHANNEL {} ({}GHz)".format(v, (200+(v * 98/CHANNEL_MAX))/100)
+    else:
+        return "{} (Warn: Check sane values)".format(v)
+
+if __name__ == "__main__":
+    print(RegDecode.decode('0x00', 0x48))
+    print(reg_0x11(0xff))
+    print()
