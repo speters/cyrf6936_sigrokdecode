@@ -18,6 +18,7 @@
 ## along with this program. If not, see <http://www.gnu.org/licenses/>.
 
 import sigrokdecode as srd
+from .regdecode import *
 from .regs import *
 
 class ChannelError(Exception):
@@ -56,17 +57,14 @@ class Decoder(srd.Decoder):
     options = (
             {'id': 'spi3pin', 'desc': 'SPI 3-Pin mode with MOSI/MISO combined as SDAT on the MOSI pin',
                 'default': 'no', 'values': ('no', 'yes')},
-            {'id': 'annsplit', 'desc': 'split cmd annotation in command, payload',
-                'default': 'no', 'values': ('no', 'yes')},
             {'id': 'delaysplit', 'desc': 'annotate delays (in us) larger than... (0 = off)', 'default': 0},
     )
 
     def __init__(self):
-        self.next()
+        self.reset()
         self.spi3pin = 0 # 0 = 4-pin SPI with CLK, CSn, MOSI, MISO; 1 = 3-pin SPI with CLK, CSn, SDAT
         self.requirements_met = True
         self.cs_was_released = False
-        self.annsplit = False
         self.samplerate = None
         self.delaysplit = 0
         self.wait_s = 0
@@ -76,8 +74,6 @@ class Decoder(srd.Decoder):
         self.out_ann = self.register(srd.OUTPUT_ANN)
         if self.options['spi3pin'] == 'yes':
             self.spi3pin = 1
-        if self.options['annsplit'] == 'yes':
-            self.annsplit = True
         try:
             self.delaysplit = float(self.options['delaysplit'])
         except ValueError:
@@ -94,7 +90,7 @@ class Decoder(srd.Decoder):
         '''Put an annotation message 'msg' at 'pos'.'''
         self.put(pos[0], pos[1], self.out_ann, [ann, [msg]])
 
-    def next(self):
+    def reset(self):
         '''Resets the decoder after a complete command was decoded.'''
         # 'True' for the first byte after CS went low.
         self.first = True
@@ -104,6 +100,21 @@ class Decoder(srd.Decoder):
         self.addr = None
         self.dir_wr = 1 # Command direction: 1 = write, 0 = read
         self.inc = 0 # Command increment: 1 = auto address increment, 0 = same address
+        self.min = 0
+        self.max = 0
+
+        # Used to collect the bytes after the command byte
+        # (and the start/end sample number).
+        self.mb = []
+        self.mb_s = -1
+        self.mb_e = -1
+
+    def next(self):
+        ''' Sets decoder to the values for the next address.'''
+        # The current command, and the minimum and maximum number
+        # of data bytes to follow.
+        if self.inc:
+            self.addr += 1
         self.min = 0
         self.max = 0
 
@@ -124,23 +135,22 @@ class Decoder(srd.Decoder):
     def decode_command(self, pos, b):
         '''Decodes the command byte 'b' at position 'pos' and prepares
         the decoding of the following data bytes.'''
-        c = self.parse_command(b)
-        if c is None:
-            self.warn(pos, 'unknown address/register')
-            return
-
-        self.addr, self.dir_wr, self.inc = c
-        self.min = 1
-        self.max = regs[self.addr][1]
-
-        if self.annsplit:
-            self.putp(pos, self.ann_write if (self.dir_wr == 1) else self.ann_read, self.format_command())
+        self.addr, self.dir_wr, self.inc = self.parse_command(b)
+        if self.addr in regs:
+            self.max = regs[self.addr][1]
         else:
-            self.mb_s = pos[0]
+            self.warn(pos, 'unknown address/register')
+
+        self.min = 1
+
+        self.mb_s = pos[0]
 
     def format_command(self, textdata = None):
         '''Returns the label for the current command.'''
-        reg = regs[self.addr][0] if self.addr in regs else self.convert_mb_data(reg, True)
+        reg = RegDecode.name(self.addr)
+        if reg is None:
+            reg = hex(self.addr)
+
         multi = '_inc' if self.inc == 1 else ''
 
         if self.dir_wr == 1:
@@ -162,15 +172,11 @@ class Decoder(srd.Decoder):
         - direction of transaction (read/write)
         - single address or incremental address
         '''
-
         cmd_addr = (b & 0b111111)
         cmd_dir = (b & (1<<7))>>7  # 1 = write, 0 = read
         cmd_inc = (b & (1<<6))>>6  # 1 = auto address increment, 0 = keep address
 
-        if cmd_addr in regs:
-            return (cmd_addr, cmd_dir, cmd_inc)
-        else:
-            return None # addr unknown
+        return (cmd_addr, cmd_dir, cmd_inc)
 
     def convert_mb_data(self, data, always_hex = True):
         '''Converts the data bytes 'data' of a multibyte command to text.
@@ -201,11 +207,8 @@ class Decoder(srd.Decoder):
             data = self.miso_bytes() if (self.spi3pin == 0) else self.mosi_bytes()
             ann = self.ann_rx
 
-        textdata = self.convert_mb_data(data, True)
-        if self.annsplit == True:
-            self.putp(pos, ann, textdata)
-        else:
-            self.putp(pos, self.ann_write if (self.dir_wr == 1) else self.ann_read, self.format_command(textdata))
+        textdata = RegDecode.decode(self.addr, data)
+        self.putp(pos, self.ann_write if (self.dir_wr == 1) else self.ann_read, self.format_command(textdata))
 
 
     def decode(self, ss, es, data):
@@ -230,12 +233,12 @@ class Decoder(srd.Decoder):
                     # after the command byte.
                     if len(self.mb) < self.min:
                         self.warn((ss, ss), 'missing data bytes')
-                    elif self.mb:
-                        self.finish_command((self.mb_s, self.mb_e))
 
+                    if (self.mb_s != -1) and len(self.mb) > 0:
+                        self.finish_command((self.mb_s, self.mb_e))
                 self.wait_s = es
 
-                self.next()
+                self.reset()
                 self.cs_was_released = True
 
             if data1 == 1 and data2 == 0:
@@ -257,12 +260,19 @@ class Decoder(srd.Decoder):
             if self.first:
                 self.first = False
                 # First MOSI byte is always the command.
-                self.decode_command(pos, mosi)
+                self.addr, self.dir_wr, self.inc = self.parse_command(mosi)
+                self.mb_s = pos[0]
+
                 # First MISO byte is discarded
                 if ((miso is not None) and (miso != 0xff)):
-                    self.warn((ss, ss), 'unrequested data')
+                    self.warn(pos, 'unrequested data')
             else:
-                if (self.addr is None) or (len(self.mb) >= self.max):
+                if RegDecode.valid(self.addr):
+                    self.max = RegDecode.width(self.addr)
+                else:
+                    self.max = 0
+
+                if (len(self.mb) > self.max):
                         self.warn(pos, 'excess byte')
                 elif ((miso is None) and (self.spi3pin == 0)):
                     self.requirements_met = False
@@ -273,6 +283,9 @@ class Decoder(srd.Decoder):
                         self.mb_s = ss
                     self.mb_e = es
                     self.mb.append((mosi, miso))
+                    if (len(self.mb) >= self.max):
+                        self.finish_command((self.mb_s, self.mb_e))
+                        self.next()
 
                     if self.addr == 0x0d: # IO_CFG_ADDR
                         old_spi3pin = self.spi3pin
@@ -290,4 +303,4 @@ class Decoder(srd.Decoder):
                             self.put(ss, es, self.out_ann, [self.ann_status, [msg]])
 
                     if self.inc:
-                        self.addr += 1
+                        self.next()
