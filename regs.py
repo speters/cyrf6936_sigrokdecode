@@ -78,15 +78,28 @@ RegDecode(regs)
 def reg_0x00(v = 0x48):
     CHANNEL_MSK = 0x7F
     CHANNEL_MAX = 0x62
-    CHANNEL_MIN = 0x00
     try:
         v = v & CHANNEL_MSK
     except TypeError:
         v = v[0] & CHANNEL_MSK
-    if (v >= CHANNEL_MIN) and (v <= CHANNEL_MAX):
-        return "CHANNEL {} ({}GHz)".format(v, (2400+(v * 98/CHANNEL_MAX))/1000)
+
+    if ((v % 3) == 0) and (v <= 96):
+        t = "100us_fast"
+    elif ((v % 2) == 0) and (v <= 94):
+        t = "180us_medium"
+    elif (v <= 97):
+        t = "270us_slow"
     else:
-        return "{}".format(v), "Warn: Check sane values"
+        t = "not_valid"
+    m = "CHANNEL {} ({}GHz, {})".format(v, ((2400+(v * 98/CHANNEL_MAX))/1000), t)
+    if (v > CHANNEL_MAX):
+        w = "Warn: Channel# > {}".format(CHANNEL_MAX)
+    else:
+        w = None
+    if w is None:
+        return m
+    else:
+        return m, w
 
 # TODO: Programmatical approach for this kind of register decoding?
 @RDecode
