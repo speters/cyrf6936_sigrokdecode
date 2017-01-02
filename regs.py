@@ -86,7 +86,7 @@ def reg_0x00(v = 0x48):
     if (v >= CHANNEL_MIN) and (v <= CHANNEL_MAX):
         return "CHANNEL {} ({}GHz)".format(v, (200+(v * 98/CHANNEL_MAX))/100)
     else:
-        return "{} (Warn: Check sane values)".format(v)
+        return "{}".format(v), "Warn: Check sane values"
 
 # TODO: Programmatical approach for this kind of register decoding?
 @RDecode
@@ -130,10 +130,10 @@ def reg_0x03(v = 0x05, type="LP"):
 
     w = ""
     if len(warn) > 0:
-        w = " (Warn: "
+        w = "Warn: "
         w += '; '.join(warn)
-        w += ')'
-    return ' | '.join(bf) + w
+
+    return ' | '.join(bf), w
 
 @RDecode
 def reg_0x04(v):
@@ -163,14 +163,19 @@ def reg_0x05(v = 0x07):
 
     w = ""
     if len(warn) > 0:
-        w = " (Warn: "
+        w = "Warn: "
         w += '; '.join(warn)
-        w += ')'
-    return ' | '.join(bf) + w
+
+    return ' | '.join(bf), w
 
 @RDecode
 def reg_0x06(v = 0x92):
     bf = []
+    try:
+        w = v[1]
+        v = v[0]
+    except:
+        pass
     if ((v & 1<<7) != 0): bf.append("AUTO_AGC_EN")
     if ((v & 1<<6) != 0): bf.append("LNA_EN")
     if ((v & 1<<5) != 0): bf.append("ATT_EN")
@@ -181,7 +186,7 @@ def reg_0x06(v = 0x92):
     if ((v & 1<<3) != 0): bf.append("FASTTURN_EN")
     if ((v & 1<<1) != 0): bf.append("RXOW_EN")
     if ((v & 1<<0) != 0): bf.append("VLD_EN")
-    return ' | '.join(bf)
+    return ' | '.join(bf) , "Warn: w={}".format(w)
 
 @RDecode
 def reg_0x07(v):
@@ -217,10 +222,10 @@ def reg_0x08(v):
 
     w = ""
     if len(warn) > 0:
-        w = " (Warn: "
+        w = "Warn: "
         w += '; '.join(warn)
-        w += ')'
-    return ' | '.join(bf) + w
+
+    return ' | '.join(bf), w
 
 @RDecode
 def reg_0x0B(v = 0xA0, type="LP"):
@@ -246,10 +251,10 @@ def reg_0x0B(v = 0xA0, type="LP"):
 
     w = ""
     if len(warn) > 0:
-        w = " (Warn: "
+        w = "Warn: "
         w += '; '.join(warn)
-        w += ')'
-    return ' | '.join(bf) + w
+
+    return ' | '.join(bf), w
 
 @RDecode
 def reg_0x0C(v = 0x04):
@@ -274,10 +279,10 @@ def reg_0x0C(v = 0x04):
 
     w = ""
     if len(warn) > 0:
-        w = " (Warn: "
+        w = "Warn: "
         w += '; '.join(warn)
-        w += ')'
-    return ' | '.join(bf) + w
+
+    return ' | '.join(bf), w
 
 @RDecode
 def reg_0x0D(v = 0x00, type = "LP"):
@@ -300,10 +305,10 @@ def reg_0x0D(v = 0x00, type = "LP"):
 
     w = ""
     if len(warn) > 0:
-        w = " (Warn: "
+        w = "Warn: "
         w += '; '.join(warn)
-        w += ')'
-    return ' | '.join(bf) + w
+
+    return ' | '.join(bf), w
 
 @RDecode
 def reg_0x0E(v = 0x00, type = "LP"):
@@ -326,10 +331,10 @@ def reg_0x0E(v = 0x00, type = "LP"):
 
     w = ""
     if len(warn) > 0:
-        w = " (Warn: "
+        w = "Warn: "
         w += '; '.join(warn)
-        w += ')'
-    return ' | '.join(bf) + w
+
+    return ' | '.join(bf), w
 
 @RDecode
 def reg_0x0F(v = 0x80):
@@ -353,10 +358,10 @@ def reg_0x0F(v = 0x80):
 
     w = ""
     if len(warn) > 0:
-        w = " (Warn: "
+        w = "Warn: "
         w += '; '.join(warn)
-        w += ')'
-    return ' | '.join(bf) + w
+
+    return ' | '.join(bf), w
 
 @RDecode
 def reg_0x10(v = 0xA5):
@@ -377,10 +382,10 @@ def reg_0x10(v = 0xA5):
 
     w = ""
     if len(warn) > 0:
-        w = " (Warn: "
+        w = "Warn: "
         w += '; '.join(warn)
-        w += ')'
-    return ' | '.join(bf) + w
+
+    return ' | '.join(bf), w
 
 @RDecode
 def reg_0x11(v = 0x04):
@@ -416,10 +421,10 @@ def reg_0x14(v = 0xA4):
 
     w = ""
     if len(warn) > 0:
-        w = " (Warn: "
+        w = "Warn: "
         w += '; '.join(warn)
-        w += ')'
-    return ' | '.join(bf) + w
+
+    return ' | '.join(bf), w
 
 @RDecode
 def reg_0x1C(v = 0x00):
@@ -451,10 +456,10 @@ def reg_0x1D(v = 0x00):
 
     w = ""
     if len(warn) > 0:
-        w = " (Warn: "
+        w = "Warn: "
         w += '; '.join(warn)
-        w += ')'
-    return ' | '.join(bf) + w
+
+    return ' | '.join(bf), w
 
 @RDecode
 def reg_0x1E(v = 0x00):
@@ -488,10 +493,10 @@ def reg_0x1F(v = 0x00):
 
     w = ""
     if len(warn) > 0:
-        w = " (Warn: "
+        w = "Warn: "
         w += '; '.join(warn)
-        w += ')'
-    return ' | '.join(bf) + w
+
+    return ' | '.join(bf), w
 
 @RDecode
 def reg_0x26(v = 0x00):
@@ -502,10 +507,10 @@ def reg_0x26(v = 0x00):
         warn.append("bits #7:4,2:0 RSVD, must be 0")
     w = ""
     if len(warn) > 0:
-        w = " (Warn: "
+        w = "Warn: "
         w += '; '.join(warn)
-        w += ')'
-    return ' | '.join(bf) + w
+
+    return ' | '.join(bf), w
 
 @RDecode
 def reg_0x27(v = 0x00):
@@ -516,10 +521,10 @@ def reg_0x27(v = 0x00):
         warn.append("bits #7:2,0 RSVD, must be 0")
     w = ""
     if len(warn) > 0:
-        w = " (Warn: "
+        w = "Warn: "
         w += '; '.join(warn)
-        w += ')'
-    return ' | '.join(bf) + w
+
+    return ' | '.join(bf), w
 
 @RDecode
 def reg_0x28(v = 0x00):
@@ -530,10 +535,10 @@ def reg_0x28(v = 0x00):
         warn.append("bits #7:2,0 RSVD, must be 0")
     w = ""
     if len(warn) > 0:
-        w = " (Warn: "
+        w = "Warn: "
         w += '; '.join(warn)
-        w += ')'
-    return ' | '.join(bf) + w
+
+    return ' | '.join(bf), w
 
 @RDecode
 def reg_0x29(v = 0x00):
@@ -544,10 +549,10 @@ def reg_0x29(v = 0x00):
         warn.append("bits #7:6,4:0 RSVD, must be 0")
     w = ""
     if len(warn) > 0:
-        w = " (Warn: "
+        w = "Warn: "
         w += '; '.join(warn)
-        w += ')'
-    return ' | '.join(bf) + w
+
+    return ' | '.join(bf), w
 
 @RDecode
 def reg_0x32(v = 0x0C):
@@ -560,10 +565,10 @@ def reg_0x32(v = 0x0C):
         warn.append("Firmware MUST write 0x3C to this register during initialization.")
     w = ""
     if len(warn) > 0:
-        w = " (Warn: "
+        w = "Warn: "
         w += '; '.join(warn)
-        w += ')'
-    return ' | '.join(bf) + w
+
+    return ' | '.join(bf), w
 
 
 @RDecode
@@ -577,10 +582,10 @@ def reg_0x35(v = 0x00):
         warn.append("Firmware MUST write 0x14 to this register during initialization.")
     w = ""
     if len(warn) > 0:
-        w = " (Warn: "
+        w = "Warn: "
         w += '; '.join(warn)
-        w += ')'
-    return ' | '.join(bf) + w
+
+    return ' | '.join(bf), w
 
 @RDecode
 def reg_0x39(v = 0x00):
@@ -592,10 +597,10 @@ def reg_0x39(v = 0x00):
         warn.append("bits #7:2 RSVD, must be 0")
     w = ""
     if len(warn) > 0:
-        w = " (Warn: "
+        w = "Warn: "
         w += '; '.join(warn)
-        w += ')'
-    return ' | '.join(bf) + w
+
+    return ' | '.join(bf), w
 
 
 if __name__ == '__main__':
