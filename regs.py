@@ -84,7 +84,7 @@ def reg_0x00(v = 0x48):
     except TypeError:
         v = v[0] & CHANNEL_MSK
     if (v >= CHANNEL_MIN) and (v <= CHANNEL_MAX):
-        return "CHANNEL {} ({}GHz)".format(v, (200+(v * 98/CHANNEL_MAX))/100)
+        return "CHANNEL {} ({}GHz)".format(v, (2400+(v * 98/CHANNEL_MAX))/1000)
     else:
         return "{}".format(v), "Warn: Check sane values"
 
