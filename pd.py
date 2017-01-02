@@ -207,11 +207,14 @@ class Decoder(srd.Decoder):
             data = self.miso_bytes() if (self.spi3pin == 0) else self.mosi_bytes()
             ann = self.ann_rx
 
-        warn = None
-        try:
-            textdata, warn = RegDecode.decode(self.addr, data)
-        except TypeError:
-            textdata = RegDecode.decode(self.addr, data)
+        decoded = RegDecode.decode(self.addr, data)
+        if type(decoded) == tuple:
+            textdata, warn = decoded
+            if warn == '':
+                warn = None
+        else:
+            textdata = decoded
+            warn = None
 
         self.putp(pos, self.ann_write if (self.dir_wr == 1) else self.ann_read, self.format_command(textdata))
         if not warn is None:

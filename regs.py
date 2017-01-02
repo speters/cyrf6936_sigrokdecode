@@ -171,11 +171,6 @@ def reg_0x05(v = 0x07):
 @RDecode
 def reg_0x06(v = 0x92):
     bf = []
-    try:
-        w = v[1]
-        v = v[0]
-    except:
-        pass
     if ((v & 1<<7) != 0): bf.append("AUTO_AGC_EN")
     if ((v & 1<<6) != 0): bf.append("LNA_EN")
     if ((v & 1<<5) != 0): bf.append("ATT_EN")
@@ -186,7 +181,7 @@ def reg_0x06(v = 0x92):
     if ((v & 1<<3) != 0): bf.append("FASTTURN_EN")
     if ((v & 1<<1) != 0): bf.append("RXOW_EN")
     if ((v & 1<<0) != 0): bf.append("VLD_EN")
-    return ' | '.join(bf) , "Warn: w={}".format(w)
+    return ' | '.join(bf)
 
 @RDecode
 def reg_0x07(v):
@@ -374,7 +369,7 @@ def reg_0x10(v = 0xA5):
         if SOP_THRESH != 0x0E:
             warn.append("Typical applications configure SOP_THRESH = 0x0E for SOP64")
     else:
-        if SOP_THRESH != (0x04 | 1): # When SOP_LEN is cleared, the most significant bit is disregarded
+        if (SOP_THRESH | 1) != (0x04 | 1): # When SOP_LEN is cleared, the most significant bit is disregarded
             warn.append("Typical applications configure SOP_THRESH = 0x04 for SOP32")
     if ((v & 1<<5) != 0): bf.append("LEN_EN")
 
