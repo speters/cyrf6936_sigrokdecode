@@ -12,7 +12,7 @@ The chip is often used as a radio module for RC transmitters/receivers, includin
 ## Protocol
 
 Communication with the chip is via a 4-pin SPI (MOSI, MISO, CLK, CSn) or 3-pin SPI (SDAT, CLK, CSn) protocol with an optional IRQ line.
-First byte sent by the master includes direction (read/write), address and a bit to denote a multi-byte read with auto-incrementing addresses.
+First byte sent by the master includes direction (read/write), address and a bit to denote a multi-byte read/write with auto-incrementing addresses.
 The following bytes are data bytes.
 
 The chip has single byte registers (for e.g. config bits) and multi byte registers (for e.g. data payload).
