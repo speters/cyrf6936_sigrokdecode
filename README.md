@@ -3,6 +3,8 @@
 The cyrf6936 protocol decoder decodes the Cypress LP/LPstar CYRF6936 2.4GHz transceiver chip protocol into human-readable pseudo-code.
 It stacks on top of the SPI PD.
 
+![Pulseview screenshot cyrf6936 decoder](screenshot_pulseview.png)
+
 ## Hardware
 
 The chip is often used as a radio module for RC transmitters/receivers, including DSM, DEVO, and CARSON brands.
