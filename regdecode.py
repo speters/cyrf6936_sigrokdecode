@@ -68,6 +68,8 @@ class RegDecode():
         printable characters are escaped.'''
 
         prefix = ''
+        if type(data) == int:
+            data = [data]
         if always_hex:
             prefix = '0x'
             def escape(b):
@@ -97,7 +99,11 @@ class RegDecode():
             if val.bit_length() > (RegDecode.width(r) * 8):
                 raise TypeError('Value {} exceeds register width {} of register {}'.format(val, RegDecode.width(r), r))
         if RegDecode.valid(r) and (r in RegDecode.decoderfuncs):
-            return RegDecode.decoderfuncs[r](val)
+            ret = RegDecode.decoderfuncs[r](val)
+            if type(ret) == int:
+                return RegDecode.to_str(ret)
+            else:
+                return ret
         else:
             return RegDecode.to_str(val)
 
