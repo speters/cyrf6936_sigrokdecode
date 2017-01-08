@@ -55,11 +55,15 @@ class Decoder(srd.Decoder):
         ('delays', 'Delays', (ann_wait,)),
     )
     options = (
-            {'id': 'spi3pin', 'desc': 'SPI 3-Pin mode with MOSI/MISO combined as SDAT on the MOSI pin',
+            {'id': 'spi3pin', 'desc': 'SPI 3-pin mode with MOSI/MISO combined as SDAT on the MOSI pin',
                 'default': 'no', 'values': ('no', 'yes')},
             {'id': 'delaysplit', 'desc': 'annotate delays (in us) larger than... (0 = off)', 'default': 0},
             {'id': 'invert_mosi', 'desc': 'Invert MOSI', 'default': 'no', 'values': ('yes', 'no')},
             {'id': 'invert_miso', 'desc': 'Invert MISO', 'default': 'no', 'values': ('yes', 'no')},
+    )
+    binary = (
+        ('txpayload', 'Transfer payload'),
+        ('rxpayload', 'Receive payload'),
     )
 
     def __init__(self):
@@ -74,6 +78,7 @@ class Decoder(srd.Decoder):
 
     def start(self):
         self.out_ann = self.register(srd.OUTPUT_ANN)
+        self.out_binary = self.register(srd.OUTPUT_BINARY)
         if self.options['spi3pin'] == 'yes':
             self.spi3pin = 1
         try:
@@ -88,9 +93,13 @@ class Decoder(srd.Decoder):
     def warn(self, pos, msg):
         '''Put a warning message 'msg' at 'pos'.'''
         self.put(pos[0], pos[1], self.out_ann, [self.ann_warn, [msg]])
+
     def putp(self, pos, ann, msg):
         '''Put an annotation message 'msg' at 'pos'.'''
         self.put(pos[0], pos[1], self.out_ann, [ann, [msg]])
+
+    def putb(self, pos, data):
+        self.put(pos[0], pos[1], self.out_binary, data)
 
     def reset(self):
         '''Resets the decoder after a complete command was decoded.'''
@@ -202,12 +211,24 @@ class Decoder(srd.Decoder):
     def finish_command(self, pos):
         '''Decodes the remaining data bytes at position 'pos'.'''
 
+        def slipad(data, w, p = 0):
+            d = w - len(data)
+            if d < 0:
+                d = 0
+            return data[0:w] + [ p for i in range(0,d)]
+
         if self.dir_wr == 1:
             data = self.mosi_bytes()
-            ann = self.ann_tx
+            if RegDecode.name(self.addr) == 'TX_BUFFER_ADR':
+                # slice/pad data to the register width
+                bindata = slipad(data, RegDecode.width(self.addr))
+                self.putb(pos, [0, bytes(bindata)])
         else:
             data = self.miso_bytes() if (self.spi3pin == 0) else self.mosi_bytes()
-            ann = self.ann_rx
+            if RegDecode.name(self.addr) == 'RX_BUFFER_ADR':
+                # slice/pad data to the register width
+                bindata = slipad(data, RegDecode.width(self.addr))
+                self.putb(pos, [1, bytes(bindata)])
 
         decoded = RegDecode.decode(self.addr, data)
         if type(decoded) == tuple:
