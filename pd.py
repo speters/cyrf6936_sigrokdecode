@@ -58,6 +58,8 @@ class Decoder(srd.Decoder):
             {'id': 'spi3pin', 'desc': 'SPI 3-Pin mode with MOSI/MISO combined as SDAT on the MOSI pin',
                 'default': 'no', 'values': ('no', 'yes')},
             {'id': 'delaysplit', 'desc': 'annotate delays (in us) larger than... (0 = off)', 'default': 0},
+            {'id': 'invert_mosi', 'desc': 'Invert MOSI', 'default': 'no', 'values': ('yes', 'no')},
+            {'id': 'invert_miso', 'desc': 'Invert MISO', 'default': 'no', 'values': ('yes', 'no')},
     )
 
     def __init__(self):
@@ -267,6 +269,11 @@ class Decoder(srd.Decoder):
                 self.requirements_met = False
                 raise ChannelError('A MOSI/SDAT pin is required.')
 
+            if self.options['invert_mosi'] == 'yes':
+                mosi = not mosi
+            if self.options['invert_miso'] == 'yes':
+                miso = not miso
+
             if self.first:
                 self.first = False
                 # First MOSI byte is always the command.
@@ -274,8 +281,8 @@ class Decoder(srd.Decoder):
                 self.mb_s = pos[0]
 
                 # First MISO byte is discarded
-                if ((miso is not None) and (miso != 0xff)):
-                    self.warn(pos, 'unrequested data')
+                if ((miso is not None) and not ((miso == 0xff) or (miso == 0x00))):
+                    self.warn(pos, 'unrequested data {}'.format(miso))
             else:
                 if RegDecode.valid(self.addr):
                     self.max = RegDecode.width(self.addr)
