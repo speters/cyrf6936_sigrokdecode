@@ -22,6 +22,7 @@ The chip has single byte registers (for e.g. config bits) and multi byte registe
 ```
 $ sigrok-cli --protocol-decoders cyrf6936 --show
 
+
 ID: cyrf6936
 Name: CYRF6936
 Long name: Cypress CYRF6936 WirelessUSB(TM) LP 2.4 GHz Radio SoC
@@ -48,6 +49,8 @@ None.
 Options:
 - spi3pin: SPI 3-Pin mode with MOSI/MISO combined as SDAT on the MOSI pin ('no', 'yes', default 'no')
 - delaysplit: annotate delays (in us) larger than... (0 = off) (default 0)
+- invert_mosi: Invert MOSI ('yes', 'no', default 'no')
+- invert_miso: Invert MISO ('yes', 'no', default 'no')
 Documentation:
 This decoder stacks on top of the 'spi' PD and decodes the protocol spoken
 by the Cypress CYRF6936 2.4GHz transceiver chips.
