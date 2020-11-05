@@ -1,6 +1,6 @@
 # cyrf6936 decoder for sigrok / libsigrokdecoder
 
-The cyrf6936 protocol decoder for [sigrok](http://sigrok.org/wiki/Protocol_decoders) decodes the Cypress LP/LPstar CYRF6936 2.4GHz transceiver chip protocol into human-readable pseudo-code.
+The `cyrf6936` protocol decoder for [sigrok](http://sigrok.org/wiki/Protocol_decoders) decodes the Cypress LP/LPstar CYRF6936 2.4GHz transceiver chip protocol into **human-readable pseudo-code**.
 It stacks on top of the [SPI PD](http://sigrok.org/wiki/Protocol_decoder:Spi).
 
 ![Pulseview screenshot cyrf6936 decoder](screenshot_pulseview.png)
@@ -12,6 +12,7 @@ The chip is often used as a radio module for RC [transmitters](https://github.co
 ## Protocol
 
 Communication with the chip is via a 4-pin SPI (MOSI, MISO, CLK, CSn) or 3-pin SPI (SDAT, CLK, CSn) protocol with an optional IRQ line.
+
 First byte sent by the master includes direction (read/write), address and a bit to denote a multi-byte read/write with auto-incrementing addresses.
 The following bytes are data bytes.
 
